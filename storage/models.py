@@ -3,24 +3,25 @@ from django.db import models
 class User(models.Model):
 
     tg_username = models.CharField(
-        verbose_name='Никнейм в мессенджере',
-        null=True, blank=True,
+        'Никнейм в мессенджере',
+        max_length=100,
     )
     chat_id = models.IntegerField(
-        verbose_name='ID чата',
-        null=True, blank=True,
+        'ID чата',
     )
     phone = models.CharField(
-        verbose_name='Телефон',
-        null=True, blank=True,
+        'Телефон',
+        max_length=10,
+        null=True,
     )
     address = models.TextField(
-        verbose_name='Адрес',
-        null=True, blank=True,
+        'Адрес',
+        null=True,
     )
     utm_source = models.CharField(
-        verbose_name='Откуда пришел',
-        null=True, blank=True,
+        'Откуда пришел',
+        max_length=100,
+        null=True,
     )
 
     def __str__(self):
@@ -33,30 +34,30 @@ class User(models.Model):
 
 class Box(models.Model):
 
-    user_id = models.ForeignKey(User,
+    user_id = models.ForeignKey(
+        User,
         verbose_name='Клиент',
-        null=True, blank=True,
         on_delete=models.CASCADE,
     )
     size = models.IntegerField(
-        verbose_name='Размеры',
-        null=True, blank=True,
+        'Размеры',
+        null=True,
     )
     volume = models.IntegerField(
-        verbose_name='Объем',
-        null=True, blank=True,
+        'Объем',
+        null=True,
     )
     paid_from = models.DateTimeField(
-        verbose_name='Оплачено с',
-        null=True, blank=True,
+        'Оплачено с',
+        null=True,
     )
     paid_till = models.DateTimeField(
-        verbose_name='Оплачено по',
-        null=True, blank=True,
+        'Оплачено по',
+        null=True,
     )
     description = models.TextField(
-        verbose_name='Откуда пришел',
-        null=True, blank=True,
+        'Хранимые вещи',
+        null=True,
     )
 
     def __str__(self):
@@ -74,32 +75,31 @@ class TransferRequest(models.Model):
         (1, 'Доставка груза'),
     )
 
-    box_id = models.ForeignKey(Box,
+    box_id = models.ForeignKey(
+        Box,
         verbose_name='Бокс',
-        null=True, blank=True,
         on_delete=models.CASCADE,
     )
 
-    transfer_type = models.CharField(
-        verbose_name='Тип трансфера',
+    transfer_type = models.IntegerField(
+        'Тип трансфера',
         choices = TRANSFER_TYPE
     )
 
     address = models.TextField(
-        verbose_name='Адрес забора/доставки',
-        null=True, blank=True,
+        'Адрес забора/доставки',
     )
     time_arrive = models.DateTimeField(
-        verbose_name='Желаемое время',
-        null=True, blank=True,
+        'Желаемое время',
+        null=True,
     )
     is_complete = models.BooleanField(
-        verbose_name='Исполнено?',
-        null=True, blank=True,
+        'Исполнено?',
+        default=False,
     )
     is_call_needed = models.BooleanField(
-        verbose_name='Нужен ли обратный звонок',
-        null=True, blank=True,
+        'Нужен ли обратный звонок',
+        default=False,
     )
 
     def __str__(self):
@@ -113,18 +113,22 @@ class TransferRequest(models.Model):
 class Promocodes(models.Model):
 
     name = models.CharField(
-        verbose_name='Название',
-        null=True, blank=True,
+        'Название',
+        max_length=100,
     )
 
     discount = models.IntegerField(
-        verbose_name='Скидка в %',
-        null=True, blank=True,
+        'Скидка в %',
+    )
+
+    valid_from = models.DateTimeField(
+        'С какой даты работает',
+        null=True,
     )
 
     valid_till = models.DateTimeField(
         verbose_name='До какой даты работает',
-        null=True, blank=True,
+        null=True,
     )
 
     def __str__(self):
