@@ -37,6 +37,7 @@ class Box(models.Model):
     user_id = models.ForeignKey(
         User,
         verbose_name='Клиент',
+        related_name='boxes',
         on_delete=models.CASCADE,
     )
     size = models.IntegerField(
@@ -78,6 +79,7 @@ class TransferRequest(models.Model):
     box_id = models.ForeignKey(
         Box,
         verbose_name='Бокс',
+        related_name='transfers',
         on_delete=models.CASCADE,
     )
 
