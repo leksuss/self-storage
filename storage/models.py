@@ -34,7 +34,7 @@ class User(models.Model):
 
 class Box(models.Model):
 
-    user_id = models.ForeignKey(
+    user = models.ForeignKey(
         User,
         verbose_name='Клиент',
         related_name='boxes',
@@ -62,7 +62,7 @@ class Box(models.Model):
     )
 
     def __str__(self):
-        return f'{self.user_id.tg_username} с {self.paid_from} по {self.paid_till}'
+        return f'{self.user.tg_username} с {self.paid_from} по {self.paid_till}'
 
     class Meta:
         verbose_name = 'бокс'
@@ -76,7 +76,7 @@ class TransferRequest(models.Model):
         (1, 'Доставка груза'),
     )
 
-    box_id = models.ForeignKey(
+    box = models.ForeignKey(
         Box,
         verbose_name='Бокс',
         related_name='transfers',
