@@ -105,7 +105,8 @@ def alert():
     tg_token = env('TELEGRAM_TOKEN')    
     bot = telegram.Bot(token=tg_token)
     current_datetime = datetime.datetime.now()
-	print(current_datetime)
+    print(current_datetime)
+
 
 if __name__ == '__main__':
     env = Env()
