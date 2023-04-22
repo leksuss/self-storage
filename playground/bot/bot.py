@@ -1,74 +1,160 @@
-from environs import Env
+import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Updater,
     CommandHandler,
     CallbackQueryHandler,
-    CallbackContext,
-    Filters,
-    MessageHandler,
+    ConversationHandler, MessageHandler, Filters,
 )
 
-from django.shortcuts import get_object_or_404
-from storage.models import User
+# Ведение журнала логов
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
+logger = logging.getLogger(__name__)
+
+# Этапы/состояния разговора
+FIRST, SECOND = range(2)
 
 
-def start(update: Update, context: CallbackContext):
-    '''start command'''
-
-    user = get_object_or_404(User, tg_username=update.effective_user.username)
-    print(user)
+def start(update, _):
+    """Вызывается по команде `/start`."""
+    # Получаем пользователя, который запустил команду `/start`
+    user = update.message.from_user
+    logger.info("Пользователь %s начал разговор", user.first_name)
 
     button = [
-        [InlineKeyboardButton("Хочу купить бокс для хранения", callback_data='buy_box')],
-        [InlineKeyboardButton("У меня уже есть бокс", callback_data='list_boxes')],
+        [
+            InlineKeyboardButton(
+                "Уже есть бокс", callback_data='there is already a boxing'
+            )
+        ]
     ]
 
     reply_markup = InlineKeyboardMarkup(button)
-
-    print(update.effective_chat.id)
-    print(update.effective_user.username)
-    update.message.reply_text('Отлично! Выбери подходящий вариант:', reply_markup=reply_markup)
+    update.message.reply_text('click on the button', reply_markup=reply_markup)
+    return FIRST
 
 
-def sends_boxing_info(update: Update, context: CallbackContext) -> None:
+def sends_boxing_info(update: Update, _) -> None:
     """Parses the CallbackQuery and updates the message text."""
+    button = [
+        [
+            InlineKeyboardButton(
+                "Забрать все вещи",
+                callback_data='pick up all the things'
+            ),
+            InlineKeyboardButton(
+                "Забрать часть вещей",
+                callback_data='pick up some things'
+            )
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(button)
     query = update.callback_query
     query.answer()
-
     if query.data:
-        context.bot.send_message(text=query.data, chat_id=update.effective_chat.id)
+        query.edit_message_text(
+            'Информация',
+            reply_markup=reply_markup
+        )
+    return FIRST
 
 
-def message_handler(update, context):
-    update.message.reply_text(f"Custom reply to message: '{update.message.text}'")
+def offers_ways_pick_up_things(update, _):
+    """Показ нового выбора кнопок"""
+    query = update.callback_query
+    query.answer()
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "Заберу сам", callback_data="i'll pick it up myself"
+            ),
+            InlineKeyboardButton(
+                "Нужен курьер для доставки",
+                callback_data="need a courier for delivery"
+            ),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if query.data == 'pick up all the things':
+        query.edit_message_text(
+            text="Выберите удобный способ забрать вещи",
+            reply_markup=reply_markup
+        )
+        return FIRST
+    query.edit_message_text(
+        text="Выберите удобный способ забрать вещи \n"
+             "Вещи можно будет вернуть, всё в порядке",
+        reply_markup=reply_markup
+    )
+    return FIRST
 
 
-def error_handler_function(update, context):
-    print(f"Update: {update} caused error: {context.error}")
+def get_client_information(update, _):
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(
+        text='Введите адрес доставки и желаемое время доставки'
+    )
+    return SECOND
+
+
+def confirms_application(update, _):
+    user = update.message.from_user
+    logger.info("Пол %s: %s", user.first_name, update.message.text)
+    update.message.reply_text(
+        'Заявка принята. Нужен обратный звонок ? \n'
+        '/yes или /no'
+    )
+    return FIRST
+
+
+def sends_qar_code(update, _):
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(text="генерация куар кода")
+    return ConversationHandler.END
 
 
 if __name__ == '__main__':
-    env = Env()
-    env.read_env()
-    tg_token = env('TELEGRAM_TOKEN')
+    updater = Updater('TOKEN')
+    dispatcher = updater.dispatcher
 
-    # Connecting our app with the Telegram API Key and using the context
-    updater = Updater(tg_token, use_context=True)
-    my_dispatcher = updater.dispatcher
-
-    # Adding CommandHandler from telegram.ext to handle defined functions/commands
-    my_dispatcher.add_handler(CommandHandler("start", start))
-
-    # Handing Incoming Messages
-    my_dispatcher.add_handler(MessageHandler(Filters.text, message_handler))
-    updater.dispatcher.add_handler(
-        CallbackQueryHandler(sends_boxing_info)
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            FIRST: [
+                CallbackQueryHandler(
+                    sends_boxing_info,
+                    pattern='^' + 'there is already a boxing' + '$'
+                ),
+                CallbackQueryHandler(
+                    offers_ways_pick_up_things,
+                    pattern='^' + 'pick up all the things' + '$'
+                ),
+                CallbackQueryHandler(
+                    offers_ways_pick_up_things,
+                    pattern='^' + 'pick up some things' + '$'
+                ),
+                CallbackQueryHandler(
+                    sends_qar_code,
+                    pattern='^' + "i'll pick it up myself" + '$'
+                ),
+                CallbackQueryHandler(
+                    get_client_information,
+                    pattern='^' + "need a courier for delivery" + '$'
+                ),
+            ],
+            SECOND: [
+                MessageHandler(Filters.text, confirms_application),
+            ],
+        },
+        fallbacks=[CommandHandler('start', start)],
     )
+    dispatcher.add_handler(conv_handler)
 
-    # Error Handling if any
-    my_dispatcher.add_error_handler(error_handler_function)
-
-    # Starting the bot using polling() function and check for messages every sec
-    updater.start_polling(1.0)
+    updater.start_polling()
     updater.idle()
