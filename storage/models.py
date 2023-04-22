@@ -23,6 +23,10 @@ class User(models.Model):
         max_length=100,
         null=True,
     )
+    from_owner = models.BooleanField(
+        'Представитель заказчика',
+        null=True,
+    )
 
     def __str__(self):
         return self.tg_username
