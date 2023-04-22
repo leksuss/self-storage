@@ -44,8 +44,8 @@ class Box(models.Model):
         related_name='boxes',
         on_delete=models.CASCADE,
     )
-    size = models.IntegerField(
-        'Размеры',
+    weight = models.IntegerField(
+        'Вес',
         null=True,
     )
     volume = models.IntegerField(
