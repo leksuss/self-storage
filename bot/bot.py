@@ -69,13 +69,17 @@ def calculate_price(weight, volume):
 
 
 def start(update: Update, context):
+    #  fetch params from url
+    _, utm_source = update.message.text.split()
 
-    user, _ = User.objects.get_or_create(
+    user, is_new_user = User.objects.get_or_create(
         tg_username=update.effective_user.username,
         chat_id=update.effective_chat.id,
     )
-
     context.bot_data['user'] = user
+
+    if is_new_user:
+        context.bot_data['utm_source'] = utm_source
 
     has_boxes = user.boxes.all().count()
     reply_text = f'Здравствуйте {update.effective_user.username}!\n'
@@ -245,7 +249,7 @@ def client_self_transfer(update: Update, context):
 
     reply_text = get_template('storage_info', {'storage': STORAGE_INFO})
 
-    #  save box in DB
+    # save box in DB
     Box.objects.create(
         user=context.bot_data['user'],
         weight=context.bot_data['weight'],
@@ -254,6 +258,12 @@ def client_self_transfer(update: Update, context):
         paid_till=datetime.now() + timedelta(days = context.bot_data['period'] * 30),
         description='',
     )
+
+    # save utm_source for new users with completed order
+    utm_source = context.bot_data.get('utm_source')
+    if utm_source:
+        context.bot_data['user'].utm_source = utm_source
+        context.bot_data['user'].save()
 
     buttons = [
         [InlineKeyboardButton(f'Список боксов', callback_data=f'client_listboxes')],
