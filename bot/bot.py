@@ -1,5 +1,5 @@
 from environs import Env
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ParseMode
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ParseMode, MessageEntity
 from telegram.ext import (
     Updater,
     CommandHandler,
@@ -11,6 +11,7 @@ from telegram.ext import (
 )
 
 import os, sys
+from datetime import datetime, timedelta
 import django
 DJANGO_PROJECT_PATH = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.append(DJANGO_PROJECT_PATH)
@@ -33,13 +34,38 @@ WEIGHT_RANGE = {
     'от 25 до 40кг': 40,
     'от 40 до 70кг': 70,
     'от 70 до 100кг': 100,
-    'больше 100кг': 101,
-    'Я не знаю :(': 'dontknow',
+    'больше 100кг': 200,
+    'Я не знаю :(': 0,
+}
+
+VOLUME_RANGE = {
+    'до 0.1м³': 0.1,
+    'от 0.1 до 0.5м³': 0.5,
+    'от 0.5 до 1м³': 1,
+    'от 1 до 2м³': 2,
+    'от 2 до 4м³': 4,
+    'больше 4 м³': 8,
+    'Я не знаю :(': 0,
+}
+
+STORAGE_INFO = {
+    'address': 'г. Москва, ул. Ленина 104',
+    'phone': '+7 495 432 31 90',
+    'working_hours': 'с 10 до 20',
 }
 
 def get_template(template_name, template_context):
     template_filepath = f'{template_name}.html'
     return render_to_string(template_filepath, template_context)
+
+
+def calculate_price(weight, volume):
+    if not volume:
+        volume = sum(VOLUME_RANGE.values()) / (len(VOLUME_RANGE) or 1)
+    if not weight:
+        weight = sum(WEIGHT_RANGE.values()) / (len(WEIGHT_RANGE) or 1)
+    price = weight * volume * 100
+    return round(price)
 
 
 def start(update: Update, context):
@@ -52,7 +78,7 @@ def start(update: Update, context):
     context.bot_data['user'] = user
 
     has_boxes = user.boxes.all().count()
-    reply_text = f'Здравствуйте {update.effective_user.username}'
+    reply_text = f'Здравствуйте {update.effective_user.username}!\n'
     if user.from_owner:
         buttons = [
             [InlineKeyboardButton("Посмотреть промокоды", callback_data='owner_promos')],
@@ -64,8 +90,7 @@ def start(update: Update, context):
             [InlineKeyboardButton("Купить еще один бокс", callback_data='client_buy_box')],
         ]
     else:
-        template_context = {'username': update.effective_user.username}
-        reply_text = get_template('new_client_welcome', template_context)
+        reply_text += get_template('new_client_welcome', {})
         buttons = [
             [InlineKeyboardButton("Купить бокс", callback_data='client_buy_box')],
         ]
@@ -93,7 +118,7 @@ def client_listboxes(update: Update, context):
     reply_text = 'Список ваших боксов\n'
     buttons = []
     for box in boxes:
-        button_text = f'Бокс номер {box.id} размером {box.size}, оплачен по {box.paid_till}'
+        button_text = f'Бокс номер {box.id} весом {box.weight}, оплачен по {box.paid_till}'
         buttons.append(
             [InlineKeyboardButton(button_text, callback_data=f'client_show_box_{box.id}')]
         )
@@ -127,7 +152,7 @@ def client_buy_box(update: Update, context):
     buttons = []
     for weight_k, weight_v in WEIGHT_RANGE.items():
         buttons.append(
-            [InlineKeyboardButton(weight_k, callback_data=f'set_weight_{weight_v}')]
+            [InlineKeyboardButton(weight_k, callback_data=f'client_set_weight_{weight_v}')]
         )
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
@@ -137,29 +162,105 @@ def client_set_weight(update: Update, context):
     query = update.callback_query
     query.answer()
 
-    weight = query.data.split('_')[-1]
-    if weight == 'dontknow':
+    weight = int(query.data.split('_')[-1])
+    context.bot_data['weight'] = weight
+
+    reply_text = ''
+    if not weight:
         reply_text = 'Не переживайте, наши грузчики взвесят ваш груз. ' \
-                     'Однако будьте готовы к тому, что цена может измениться\n'
-    else:
-        WEIGHT_RANGE_REVERSED = {v: k for k, v in WEIGHT_RANGE.items()}
-        reply_text = f'Вы указали вес {WEIGHT_RANGE_REVERSED[weight]}\n'
+                     'Однако будьте готовы к тому, что цена может измениться\n\n'
 
-    reply_text += 'Теперь укажите объем груза'
-    '''
-    buttons = [
-        [InlineKeyboardButton("до 0.1м³", callback_data=f'set_weight_lt10')],
-        [InlineKeyboardButton("0-25кг", callback_data=f'set_weight_25')],
-        [InlineKeyboardButton("25-40кг", callback_data=f'set_weight_40')],
-        [InlineKeyboardButton("40-70кг", callback_data=f'set_weight_70')],
-        [InlineKeyboardButton("70-100кг", callback_data=f'set_weight_100')],
-        [InlineKeyboardButton("больше 100кг", callback_data=f'set_weight_gt100')],  # 200 кг
-        [InlineKeyboardButton("Я не знаю :(", callback_data='set_weight_dont_know')],
-    ]
-
+    reply_text += 'Теперь укажите объем груза. Объем рассчитывается как перемножение' \
+                  ' трех величин в метрах: высоты, ширины и длины:'
+    buttons = []
+    for volume_k, volume_v in VOLUME_RANGE.items():
+        buttons.append(
+            [InlineKeyboardButton(volume_k, callback_data=f'client_set_volume_{volume_v}')]
+        )
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
-    '''
+
+
+def client_set_volume(update: Update, context):
+    query = update.callback_query
+    query.answer()
+
+    volume = float(query.data.split('_')[-1])
+    price = calculate_price(context.bot_data['weight'], volume)
+    context.bot_data['volume'] = volume
+    context.bot_data['price'] = price
+
+    reply_text = ''
+    if not context.bot_data['weight'] and not volume:
+        reply_text = 'Цена бокса зависит от веса и объема.' \
+                     'После того, как эти величины измерят грузчики, вам сообщат цену\n\n'
+    elif not volume:
+        reply_text = 'Не переживайте, наши грузчики измерят размеры вашего груза. ' \
+                     'Однако будьте готовы к тому, что цена может измениться' \
+                     '\n\n'
+    if price:
+        reply_text += f'Цена вашего бокса составляет: {price} руб. в месяц\n\n' \
+                      f'Укажите период аренды:'
+
+    buttons = [
+        [InlineKeyboardButton(f'1 месяц', callback_data=f'client_rent_period_1')],
+        [InlineKeyboardButton(f'3 месяца', callback_data=f'client_rent_period_3')],
+        [InlineKeyboardButton(f'6 месяцев', callback_data=f'client_rent_period_6')],
+        [InlineKeyboardButton(f'12 месяцев', callback_data=f'client_rent_period_12')],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
+
+def client_rent_period(update: Update, context):
+    query = update.callback_query
+    query.answer()
+
+    period = int(query.data.split('_')[-1])
+    context.bot_data['period'] = period
+
+    reply_text = 'Как ваши вещи окажутся на складе?'
+    buttons = [
+        [InlineKeyboardButton(f'Нужно забрать вещи по адресу', callback_data=f'client_request_transfer')],
+        [InlineKeyboardButton(f'Доставлю свои вещи сам', callback_data=f'client_self_transfer')],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
+
+def client_request_transfer(update: Update, context):
+    query = update.callback_query
+    query.answer()
+
+    user = context.bot_data['user']
+
+    if not user.phone:
+        reply_text = 'Пожалуйста, введите ваш номер телефона:'
+        query.bot.send_message(text=reply_text, chat_id=update.effective_chat.id)
+        print(query.bot)
+
+def client_self_transfer(update: Update, context):
+    query = update.callback_query
+    query.answer()
+
+    reply_text = get_template('storage_info', {'storage': STORAGE_INFO})
+
+    #  save box in DB
+    Box.objects.create(
+        user=context.bot_data['user'],
+        weight=context.bot_data['weight'],
+        volume=context.bot_data['volume'],
+        paid_from=datetime.now(),
+        paid_till=datetime.now() + timedelta(days = context.bot_data['period'] * 30),
+        description='',
+    )
+
+    buttons = [
+        [InlineKeyboardButton(f'Список боксов', callback_data=f'client_listboxes')],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
 
 def message_handler(update, context):
     update.message.reply_text(f"Custom reply to message: '{update.message.text}'")
@@ -187,10 +288,18 @@ if __name__ == '__main__':
     # new box handlers
     app.add_handler(CallbackQueryHandler(client_buy_box, pattern='^client_buy_box$'))
     app.add_handler(CallbackQueryHandler(client_set_weight, pattern='^client_set_weight_'))
+    app.add_handler(CallbackQueryHandler(client_set_volume, pattern='^client_set_volume_'))
+    app.add_handler(CallbackQueryHandler(client_rent_period, pattern='^client_rent_period_'))
+    app.add_handler(CallbackQueryHandler(client_request_transfer, pattern='^client_request_transfer$'))
+    app.add_handler(CallbackQueryHandler(client_self_transfer, pattern='^client_self_transfer$'))
 
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(Filters.text, message_handler))
+    '''
+    app.add_handler(MessageHandler(
+        Filters.entity(MessageEntity.PHONE_NUMBER),
+        message_handler))
+    '''
     app.add_error_handler(error_handler_function)
 
     updater.start_polling(1.0)
