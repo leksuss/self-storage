@@ -70,7 +70,10 @@ def calculate_price(weight, volume):
 
 def start(update: Update, context):
     #  fetch params from url
-    _, *utm_source = update.message.text.split()
+
+    utm_source= ''
+    if update.message:
+        _, *utm_source = update.message.text.split()
 
     user, is_new_user = User.objects.get_or_create(
         tg_username=update.effective_user.username,
@@ -99,9 +102,8 @@ def start(update: Update, context):
         buttons = [
             [InlineKeyboardButton("Купить бокс", callback_data='client_buy_box')],
         ]
-
     reply_markup = InlineKeyboardMarkup(buttons)
-    update.message.reply_text(reply_text, reply_markup=reply_markup)
+    context.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
 
 def owner_promos(update: Update, context):
@@ -113,7 +115,13 @@ def owner_promos(update: Update, context):
     if promos:
         promo_html = [get_template('promos', {'promo': promo}) for promo in promos]
         reply_text = '\n'.join(promo_html)
-    query.bot.send_message(text=reply_text, chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
+
+    buttons = [
+        [InlineKeyboardButton(f'В начало', callback_data=f'start')],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
 
 def client_listboxes(update: Update, context):
@@ -127,6 +135,7 @@ def client_listboxes(update: Update, context):
         buttons.append(
             [InlineKeyboardButton(button_text, callback_data=f'client_show_box_{box.id}')]
         )
+    buttons.append([InlineKeyboardButton('В начало', callback_data=f'start')])
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
@@ -318,8 +327,7 @@ def client_save_transfer(update: Update, context):
 
     reply_text = 'Спасибо за ваш заказ! Наши грузчики позвонят вам за 1 час до приезда'
     buttons = [
-        [InlineKeyboardButton(f'Список боксов', callback_data=f'client_listboxes')],
-        [InlineKeyboardButton("Купить еще один бокс", callback_data='client_buy_box')],
+        [InlineKeyboardButton('В начало', callback_data=f'start')]
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
@@ -347,8 +355,7 @@ def client_self_transfer(update: Update, context):
         context.user_data['user'].save()
 
     buttons = [
-        [InlineKeyboardButton(f'Список боксов', callback_data=f'client_listboxes')],
-        [InlineKeyboardButton("Купить еще один бокс", callback_data='client_buy_box')],
+        [InlineKeyboardButton('В начало', callback_data=f'start')]
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
@@ -391,8 +398,9 @@ def transfers(update: Update, context):
         reply_text = 'Список заявок на перевозку грузов\n'
         button_text = f'Бокс № {transfer.box.id}, {transfer.transfer_type}'
         buttons.append(
-            [InlineKeyboardButton(button_text, callback_data=f'transfer_box_{transfer.id}')]
+            [InlineKeyboardButton(button_text, callback_data=f'transfer_box_{transfer.id}')],
         )
+    buttons.append([InlineKeyboardButton(f'В начало', callback_data=f'start')])
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
@@ -422,10 +430,12 @@ def transfer_complete(update: Update, context):
     TransferRequest.objects.filter(id=transfer_id).update(is_complete=True)
     reply_text = f'Трансфер {transfer_id} выполнен'
     buttons = [
-        [InlineKeyboardButton(f'К списку трансферов', callback_data=f'transfers')],
+        [InlineKeyboardButton(f'В начало', callback_data=f'start')],
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
+
 
 
 if __name__ == '__main__':
@@ -435,6 +445,9 @@ if __name__ == '__main__':
 
     updater = Updater(tg_token, use_context=True)
     app = updater.dispatcher
+
+    # common handlers
+    app.add_handler(CallbackQueryHandler(start, pattern='^start$'))
 
     # owner handlers
     app.add_handler(CallbackQueryHandler(owner_promos, pattern='^owner_promos$'))
