@@ -19,7 +19,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "self_storage.settings")
 django.setup()
 
 from django.template.loader import render_to_string
-from storage.models import User, Box, Promocodes
+from storage.models import User, Box, Promocodes, TransferRequest
 
 
 STATIC_PAGES = (
@@ -86,7 +86,8 @@ def start(update: Update, context):
     if user.from_owner:
         buttons = [
             [InlineKeyboardButton("Посмотреть промокоды", callback_data='owner_promos')],
-            # [InlineKeyboardButton("Посмотреть просроченные боксы", callback_data='unpaid_boxes')],
+            [InlineKeyboardButton("Посмотреть просроченные боксы", callback_data='unpaid_boxes')],
+            [InlineKeyboardButton("Посмотреть открытые трансферы", callback_data='transfers')],
         ]
     elif has_boxes:
         buttons = [
@@ -280,6 +281,42 @@ def error_handler_function(update, context):
     print(f"Update: {update} caused error: {context.error}")
 
 
+def unpaid_boxes(update: Update, context):
+    query = update.callback_query
+    query.answer()
+    current_datetime=datetime.now()
+    boxes = Box.objects.filter(paid_till__lte=current_datetime).prefetch_related('user')
+    reply_text = 'Просроченных боксов нету'
+    unpaix_boxes_html = [get_template('unpaid_boxes', {'box': box}) for box in boxes]
+    reply_text = '\n'.join(unpaix_boxes_html)        
+    context.bot.send_message(text=reply_text,  chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
+
+
+def transfers(update: Update, context):
+    query = update.callback_query
+    query.answer()
+    transfers = TransferRequest.objects.filter(is_complete=False)[:8]
+    reply_text = 'Открытых трансферов нету'
+    buttons = []
+    for transfer in transfers:
+        reply_text = 'Список открытых трансферов\n'        
+        button_text = f'Бокс № {transfer.box.id}, адрес {transfer.address}'
+        buttons.append(
+            [InlineKeyboardButton(button_text, callback_data=f'transfer_box_{transfer.id}')]
+        )
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
+
+def transfer_box(update: Update, context):
+    query = update.callback_query
+    query.answer()
+
+    transfer_id = query.data.split('_')[-1]
+    TransferRequest.objects.filter(id=transfer_id).update(is_complete=True)
+    query.bot.send_message(text=f'Трансфер {transfer_id} помечен, как выполненный', chat_id=update.effective_chat.id)
+
+
 if __name__ == '__main__':
     env = Env()
     env.read_env()
@@ -290,7 +327,8 @@ if __name__ == '__main__':
 
     # owner handlers
     app.add_handler(CallbackQueryHandler(owner_promos, pattern='^owner_promos$'))
-
+    app.add_handler(CallbackQueryHandler(transfers, pattern='^transfers$'))
+    app.add_handler(CallbackQueryHandler(transfer_box, pattern='^transfer_box_'))
     # existing client handlers
     app.add_handler(CallbackQueryHandler(client_listboxes, pattern='^client_listboxes$'))
     app.add_handler(CallbackQueryHandler(client_show_box, pattern='^client_show_box_'))
