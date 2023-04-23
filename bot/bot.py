@@ -70,7 +70,7 @@ def calculate_price(weight, volume):
 
 def start(update: Update, context):
     #  fetch params from url
-    _, utm_source = update.message.text.split()
+    _, *utm_source = update.message.text.split()
 
     user, is_new_user = User.objects.get_or_create(
         tg_username=update.effective_user.username,
@@ -78,8 +78,8 @@ def start(update: Update, context):
     )
     context.bot_data['user'] = user
 
-    if is_new_user:
-        context.bot_data['utm_source'] = utm_source
+    if is_new_user and utm_source:
+        context.bot_data['utm_source'] = utm_source[0]
 
     has_boxes = user.boxes.all().count()
     reply_text = f'Здравствуйте {update.effective_user.username}!\n'
