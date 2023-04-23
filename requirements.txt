@@ -3,3 +3,5 @@ requests==2.28.2
 python-telegram-bot==13.0
 django==4.2
 APScheduler==3.6.3
+pillow==9.5.0
+qrcode==7.4.2
