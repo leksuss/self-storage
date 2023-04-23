@@ -221,28 +221,108 @@ def client_rent_period(update: Update, context):
     query = update.callback_query
     query.answer()
 
+    user = context.user_data['user']
+
     period = int(query.data.split('_')[-1])
     context.user_data['period'] = period
 
+    data_for_transfer_request = f'client_ask_phone'
+    if user.phone:
+        data_for_transfer_request = f'client_ask_address'
+
     reply_text = 'Как ваши вещи окажутся на складе?'
     buttons = [
-        [InlineKeyboardButton(f'Нужно забрать вещи по адресу', callback_data=f'client_request_transfer')],
+        [InlineKeyboardButton(f'Нужно забрать вещи по адресу', callback_data=data_for_transfer_request)],
         [InlineKeyboardButton(f'Доставлю свои вещи сам', callback_data=f'client_self_transfer')],
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
 
-def client_request_transfer(update: Update, context):
+def client_ask_phone(update: Update, context):
+
+    # is asking phone
+    context.user_data['ask_phone'] = True
+    reply_text = 'Пожалуйста, введите ваш номер телефона:'
+    context.bot.send_message(text=reply_text, chat_id=update.effective_chat.id)
+
+def client_ask_address(update: Update, context):
+
+    # is asking address
+    context.user_data['ask_address'] = True
+    reply_text = 'Пожалуйста, введите ваш адрес:'
+    context.bot.send_message(text=reply_text, chat_id=update.effective_chat.id)
+
+def client_ask_time_arrive(update: Update, context):
+
+    reply_text = 'В какое время вам удобно, чтобы приехали наши грузчики?'
+    buttons = [
+        [InlineKeyboardButton(f'9-13', callback_data=f'client_time_arrive_9-13')],
+        [InlineKeyboardButton(f'13-18', callback_data=f'client_time_arrive_13-18')],
+        [InlineKeyboardButton(f'18-22', callback_data=f'client_time_arrive_18-22')],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    context.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
+
+def client_time_arrive(update: Update, context):
     query = update.callback_query
     query.answer()
 
-    user = context.user_data['user']
+    time_arrive = query.data.split('_')[-1]
+    context.user_data['time_arrive'] = time_arrive
 
-    if not user.phone:
-        reply_text = 'Пожалуйста, введите ваш номер телефона:'
-        query.bot.send_message(text=reply_text, chat_id=update.effective_chat.id)
-        print(query.bot)
+    reply_text = 'Подтвердите согласие на обработку персональных данных. Полный текст доступен по адресу:' \
+                 'http://some.url/text.pdf'
+    buttons = [
+        [InlineKeyboardButton(f'Согласен на обработку перс.данных', callback_data=f'client_save_transfer')],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    context.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
+
+def client_save_transfer(update: Update, context):
+    query = update.callback_query
+    query.answer()
+
+    # save user phone & address in DB
+    user = context.user_data['user']
+    if context.user_data.get('phone'):
+        user.phone = context.user_data['phone']
+    user.address = context.user_data['address']
+    user.save()
+
+    # save box in DB
+    box = Box.objects.create(
+        user=context.user_data['user'],
+        weight=context.user_data['weight'],
+        volume=context.user_data['volume'],
+        paid_from=datetime.now(),
+        paid_till=datetime.now() + timedelta(days = context.user_data['period'] * 30),
+        description='',
+    )
+
+    # save transfer in DB
+    TransferRequest.objects.create(
+        box=box,
+        transfer_type=0,
+        address=context.user_data['address'],
+        time_arrive=context.user_data['time_arrive'],
+        is_complete=False,
+    )
+
+    utm_source = context.user_data.get('utm_source')
+    if utm_source:
+        context.user_data['user'].utm_source = utm_source
+        context.user_data['user'].save()
+
+    reply_text = 'Спасибо за ваш заказ! Наши грузчики позвонят вам за 1 час до приезда'
+    buttons = [
+        [InlineKeyboardButton(f'Список боксов', callback_data=f'client_listboxes')],
+        [InlineKeyboardButton("Купить еще один бокс", callback_data='client_buy_box')],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
 def client_self_transfer(update: Update, context):
     query = update.callback_query
@@ -268,13 +348,22 @@ def client_self_transfer(update: Update, context):
 
     buttons = [
         [InlineKeyboardButton(f'Список боксов', callback_data=f'client_listboxes')],
+        [InlineKeyboardButton("Купить еще один бокс", callback_data='client_buy_box')],
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
 
 def message_handler(update, context):
-    update.message.reply_text(f"Custom reply to message: '{update.message.text}'")
+    if context.user_data.get('ask_phone'):
+        context.user_data['phone'] = update.message.text
+        context.user_data['ask_phone'] = False
+        client_ask_address(update, context)
+    elif context.user_data.get('ask_address'):
+        context.user_data['address'] = update.message.text
+        context.user_data['ask_address'] = False
+        client_ask_time_arrive(update, context)
+
 
 
 def error_handler_function(update, context):
@@ -339,16 +428,15 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(client_set_weight, pattern='^client_set_weight_'))
     app.add_handler(CallbackQueryHandler(client_set_volume, pattern='^client_set_volume_'))
     app.add_handler(CallbackQueryHandler(client_rent_period, pattern='^client_rent_period_'))
-    app.add_handler(CallbackQueryHandler(client_request_transfer, pattern='^client_request_transfer$'))
+    app.add_handler(CallbackQueryHandler(client_ask_phone, pattern='^client_ask_phone$'))
+    app.add_handler(CallbackQueryHandler(client_ask_address, pattern='^client_ask_address$'))
+    app.add_handler(CallbackQueryHandler(client_time_arrive, pattern='^client_time_arrive_'))
+    app.add_handler(CallbackQueryHandler(client_save_transfer, pattern='^client_save_transfer'))
     app.add_handler(CallbackQueryHandler(client_self_transfer, pattern='^client_self_transfer$'))
 
-
     app.add_handler(CommandHandler("start", start))
-    '''
-    app.add_handler(MessageHandler(
-        Filters.entity(MessageEntity.PHONE_NUMBER),
-        message_handler))
-    '''
+
+    app.add_handler(MessageHandler(Filters.text, message_handler))
     app.add_error_handler(error_handler_function)
 
     updater.start_polling(1.0)
