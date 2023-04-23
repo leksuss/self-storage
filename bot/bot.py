@@ -385,11 +385,11 @@ def transfers(update: Update, context):
     query = update.callback_query
     query.answer()
     transfers = TransferRequest.objects.filter(is_complete=False)[:8]
-    reply_text = 'Открытых трансферов нету'
+    reply_text = 'Заявок на перевозку нет'
     buttons = []
     for transfer in transfers:
-        reply_text = 'Список открытых трансферов\n'        
-        button_text = f'Бокс № {transfer.box.id}, адрес {transfer.address}'
+        reply_text = 'Список заявок на перевозку грузов\n'
+        button_text = f'Бокс № {transfer.box.id}, {transfer.transfer_type}'
         buttons.append(
             [InlineKeyboardButton(button_text, callback_data=f'transfer_box_{transfer.id}')]
         )
@@ -402,8 +402,30 @@ def transfer_box(update: Update, context):
     query.answer()
 
     transfer_id = query.data.split('_')[-1]
+
+    transfer_request = TransferRequest.objects.get(id=transfer_id)
+    reply_text = get_template('transfer_info', {'transfer': transfer_request})
+
+    buttons = [
+        [InlineKeyboardButton(f'Пометить трансфер как выполненный', callback_data=f'transfer_complete_{transfer_id}')],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
+
+def transfer_complete(update: Update, context):
+    query = update.callback_query
+    query.answer()
+
+    transfer_id = query.data.split('_')[-1]
+
     TransferRequest.objects.filter(id=transfer_id).update(is_complete=True)
-    query.bot.send_message(text=f'Трансфер {transfer_id} помечен, как выполненный', chat_id=update.effective_chat.id)
+    reply_text = f'Трансфер {transfer_id} выполнен'
+    buttons = [
+        [InlineKeyboardButton(f'К списку трансферов', callback_data=f'transfers')],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
 
 if __name__ == '__main__':
@@ -419,6 +441,8 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(unpaid_boxes, pattern='^unpaid_boxes'))       
     app.add_handler(CallbackQueryHandler(transfers, pattern='^transfers$'))
     app.add_handler(CallbackQueryHandler(transfer_box, pattern='^transfer_box_'))
+    app.add_handler(CallbackQueryHandler(transfer_complete, pattern='^transfer_complete_'))
+
     # existing client handlers
     app.add_handler(CallbackQueryHandler(client_listboxes, pattern='^client_listboxes$'))
     app.add_handler(CallbackQueryHandler(client_show_box, pattern='^client_show_box_'))
