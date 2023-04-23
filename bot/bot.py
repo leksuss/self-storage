@@ -12,6 +12,7 @@ from telegram.ext import (
 
 import os, sys
 from datetime import datetime, timedelta
+from pytz import timezone
 import django
 DJANGO_PROJECT_PATH = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.append(DJANGO_PROJECT_PATH)
@@ -380,11 +381,13 @@ def error_handler_function(update, context):
 def unpaid_boxes(update: Update, context):
     query = update.callback_query
     query.answer()
-    current_datetime=datetime.now()
+    tz=timezone('Europe/Moscow')      
+    current_datetime=datetime.now(tz)
     boxes = Box.objects.filter(paid_till__lte=current_datetime).prefetch_related('user')
     reply_text = 'Просроченных боксов нету'
     unpaix_boxes_html = [get_template('unpaid_boxes', {'box': box}) for box in boxes]
-    reply_text = '\n'.join(unpaix_boxes_html)        
+    if boxes:
+        reply_text = '\n'.join(unpaix_boxes_html)        
     context.bot.send_message(text=reply_text,  chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
 
 
