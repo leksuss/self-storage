@@ -76,10 +76,10 @@ def start(update: Update, context):
         tg_username=update.effective_user.username,
         chat_id=update.effective_chat.id,
     )
-    context.bot_data['user'] = user
+    context.user_data['user'] = user
 
     if is_new_user and utm_source:
-        context.bot_data['utm_source'] = utm_source[0]
+        context.user_data['utm_source'] = utm_source[0]
 
     has_boxes = user.boxes.all().count()
     reply_text = f'Здравствуйте {update.effective_user.username}!\n'
@@ -119,7 +119,7 @@ def owner_promos(update: Update, context):
 def client_listboxes(update: Update, context):
     query = update.callback_query
     query.answer()
-    boxes = context.bot_data['user'].boxes.all()
+    boxes = context.user_data['user'].boxes.all()
     reply_text = 'Список ваших боксов\n'
     buttons = []
     for box in boxes:
@@ -136,7 +136,7 @@ def client_show_box(update: Update, context):
     query.answer()
     box_id = int(query.data.split('_')[-1])
     box = Box.objects.get(pk=box_id)
-    context.bot_data['current_box'] = box
+    context.user_data['current_box'] = box
 
     reply_text = get_template('showbox', {'box': box})
     buttons = [
@@ -168,7 +168,7 @@ def client_set_weight(update: Update, context):
     query.answer()
 
     weight = int(query.data.split('_')[-1])
-    context.bot_data['weight'] = weight
+    context.user_data['weight'] = weight
 
     reply_text = ''
     if not weight:
@@ -191,12 +191,12 @@ def client_set_volume(update: Update, context):
     query.answer()
 
     volume = float(query.data.split('_')[-1])
-    price = calculate_price(context.bot_data['weight'], volume)
-    context.bot_data['volume'] = volume
-    context.bot_data['price'] = price
+    price = calculate_price(context.user_data['weight'], volume)
+    context.user_data['volume'] = volume
+    context.user_data['price'] = price
 
     reply_text = ''
-    if not context.bot_data['weight'] and not volume:
+    if not context.user_data['weight'] and not volume:
         reply_text = 'Цена бокса зависит от веса и объема.' \
                      'После того, как эти величины измерят грузчики, вам сообщат цену\n\n'
     elif not volume:
@@ -222,7 +222,7 @@ def client_rent_period(update: Update, context):
     query.answer()
 
     period = int(query.data.split('_')[-1])
-    context.bot_data['period'] = period
+    context.user_data['period'] = period
 
     reply_text = 'Как ваши вещи окажутся на складе?'
     buttons = [
@@ -237,7 +237,7 @@ def client_request_transfer(update: Update, context):
     query = update.callback_query
     query.answer()
 
-    user = context.bot_data['user']
+    user = context.user_data['user']
 
     if not user.phone:
         reply_text = 'Пожалуйста, введите ваш номер телефона:'
@@ -252,19 +252,19 @@ def client_self_transfer(update: Update, context):
 
     # save box in DB
     Box.objects.create(
-        user=context.bot_data['user'],
-        weight=context.bot_data['weight'],
-        volume=context.bot_data['volume'],
+        user=context.user_data['user'],
+        weight=context.user_data['weight'],
+        volume=context.user_data['volume'],
         paid_from=datetime.now(),
-        paid_till=datetime.now() + timedelta(days = context.bot_data['period'] * 30),
+        paid_till=datetime.now() + timedelta(days = context.user_data['period'] * 30),
         description='',
     )
 
     # save utm_source for new users with completed order
-    utm_source = context.bot_data.get('utm_source')
+    utm_source = context.user_data.get('utm_source')
     if utm_source:
-        context.bot_data['user'].utm_source = utm_source
-        context.bot_data['user'].save()
+        context.user_data['user'].utm_source = utm_source
+        context.user_data['user'].save()
 
     buttons = [
         [InlineKeyboardButton(f'Список боксов', callback_data=f'client_listboxes')],
