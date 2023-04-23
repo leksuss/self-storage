@@ -95,16 +95,13 @@ class TransferRequest(models.Model):
     address = models.TextField(
         'Адрес забора/доставки',
     )
-    time_arrive = models.DateTimeField(
+    time_arrive = models.CharField(
         'Желаемое время',
+        max_length=10,
         null=True,
     )
     is_complete = models.BooleanField(
         'Исполнено?',
-        default=False,
-    )
-    is_call_needed = models.BooleanField(
-        'Нужен ли обратный звонок',
         default=False,
     )
 
