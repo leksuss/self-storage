@@ -1,4 +1,10 @@
 import logging
+import qrcode
+import random
+import os
+import sys
+import django
+from environs import Env
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Updater,
@@ -6,6 +12,11 @@ from telegram.ext import (
     CallbackQueryHandler,
     ConversationHandler, MessageHandler, Filters,
 )
+
+DJANGO_PROJECT_PATH = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.append(DJANGO_PROJECT_PATH)
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "self_storage.settings")
+django.setup()
 
 # Ведение журнала логов
 logging.basicConfig(
@@ -112,15 +123,39 @@ def confirms_application(update, _):
     return FIRST
 
 
-def sends_qar_code(update, _):
+def sends_qar_code(update, context):
+    STORAGE_INFO = {
+        'address': 'г. Москва, ул. Ленина 104',
+        'phone': '+7 495 432 31 90',
+        'working_hours': 'с 10 до 20',
+    }
     query = update.callback_query
     query.answer()
-    query.edit_message_text(text="генерация куар кода")
+    query.edit_message_text(text=f'{STORAGE_INFO["address"]}\n'
+                                 f'{STORAGE_INFO["working_hours"]}'
+                            )
+    get_random_qua_cod()
+    with open('../bot/qua.png', 'rb') as file:
+        context.bot.send_document(chat_id=update.effective_chat.id, document=file)
     return ConversationHandler.END
 
 
+def get_random_qua_cod():
+    random_code = ''
+    number_digits = 12
+    for number in range(number_digits):
+        random_code = random_code + random.choice(list(
+            '123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM'))
+    filename = "qua.png"
+    img = qrcode.make(random_code)
+    img.save(filename)
+
+
 if __name__ == '__main__':
-    updater = Updater('TOKEN')
+    env = Env()
+    env.read_env()
+    tg_token = env('TELEGRAM_TOKEN')
+    updater = Updater(tg_token)
     dispatcher = updater.dispatcher
 
     conv_handler = ConversationHandler(
