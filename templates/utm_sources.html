@@ -1,0 +1,4 @@
+Источники клиентов:
+{% for utm_source in utm_sources %}
+    Метка: "{{ utm_source.utm_source }}" - {{ utm_source.count }} заказов
+{% endfor %}

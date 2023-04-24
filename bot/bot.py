@@ -20,6 +20,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "self_storage.settings")
 django.setup()
 
 from django.template.loader import render_to_string
+from django.db.models import Count
+
 from storage.models import User, Box, Promocodes, TransferRequest
 
 import qrcode
@@ -91,9 +93,11 @@ def start(update: Update, context):
     reply_text = f'Здравствуйте {update.effective_user.username}!\n'
     if user.from_owner:
         buttons = [
-            [InlineKeyboardButton("Посмотреть промокоды", callback_data='owner_promos')],
-            [InlineKeyboardButton("Посмотреть просроченные боксы", callback_data='unpaid_boxes')],
-            [InlineKeyboardButton("Посмотреть открытые трансферы", callback_data='transfers')],
+            [InlineKeyboardButton("Промокоды", callback_data='owner_promos')],
+            [InlineKeyboardButton("Просроченные боксы", callback_data='unpaid_boxes')],
+            [InlineKeyboardButton("Заявки на трансфер", callback_data='transfers')],
+            [InlineKeyboardButton("Источники клиентов", callback_data='utm_sources')],
+
         ]
     elif has_boxes:
         buttons = [
@@ -411,6 +415,21 @@ def transfers(update: Update, context):
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
 
+def utm_sources(update: Update, context):
+    query = update.callback_query
+    query.answer()
+
+    count_utm_sources = User.objects.all() \
+        .values('utm_source') \
+        .annotate(count=Count('pk', distinct=True))
+
+    reply_text = get_template('utm_sources', {'utm_sources': count_utm_sources})
+
+    buttons = [[InlineKeyboardButton(f'В начало', callback_data=f'start')]]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
+
 def transfer_box(update: Update, context):
     query = update.callback_query
     query.answer()
@@ -557,6 +576,7 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(transfers, pattern='^transfers$'))
     app.add_handler(CallbackQueryHandler(transfer_box, pattern='^transfer_box_'))
     app.add_handler(CallbackQueryHandler(transfer_complete, pattern='^transfer_complete_'))
+    app.add_handler(CallbackQueryHandler(utm_sources, pattern='^utm_sources$'))
 
     # existing client handlers
     app.add_handler(CallbackQueryHandler(client_listboxes, pattern='^client_listboxes$'))
