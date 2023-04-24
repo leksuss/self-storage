@@ -401,7 +401,10 @@ def client_self_transfer(update: Update, context):
         [InlineKeyboardButton('В начало', callback_data=f'start')]
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
-    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+    get_random_qua_cod()
+    with open('qua.png', 'rb') as file:
+        query.bot.send_document(caption=reply_text, reply_markup=reply_markup, document=file,
+                                chat_id=update.effective_chat.id)
 
 
 def message_handler(update, context):
@@ -592,8 +595,6 @@ def sends_qar_code(update, context):
     with open('qua.png', 'rb') as file:
         query.bot.send_document(caption=reply_text, reply_markup=reply_markup, document=file,
                                 chat_id=update.effective_chat.id)
-        # context.bot.send_document(chat_id=update.effective_chat.id, document=file, caption=reply_text)
-
 
 def get_random_qua_cod():
     random_code = ''
