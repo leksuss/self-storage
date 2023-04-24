@@ -103,7 +103,6 @@ def start(update: Update, context):
         buttons = [
             [InlineKeyboardButton("Список ваших боксов", callback_data='client_listboxes')],
             [InlineKeyboardButton("Купить еще один бокс", callback_data='client_buy_box')],
-            [InlineKeyboardButton("Забрать вещи", callback_data='there is already a boxing')]
         ]
     else:
         reply_text += get_template('new_client_welcome', {})
@@ -157,9 +156,9 @@ def client_show_box(update: Update, context):
 
     reply_text = get_template('showbox', {'box': box})
     buttons = [
-        [InlineKeyboardButton(f'Заказать доставку всех вещей', callback_data=f'123')],
-        [InlineKeyboardButton(f'Заказать доставку части вещей', callback_data=f'123')],
-        [InlineKeyboardButton(f'QR код чтобы забрать самостоятельно', callback_data=f'123')]
+        [InlineKeyboardButton(f'Заказать доставку вещей', callback_data=f'pick up all the things')],
+        # [InlineKeyboardButton(f'Заказать доставку части вещей', callback_data=f'pick up some things')],
+        [InlineKeyboardButton(f'Хочу забрать самостоятельно', callback_data=f'pick it up myself')]
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
@@ -247,6 +246,8 @@ def client_rent_period(update: Update, context):
     if user.phone:
         data_for_transfer_request = f'client_ask_address'
 
+    context.user_data['transfer_type'] = 0
+
     reply_text = 'Как ваши вещи окажутся на складе?'
     buttons = [
         [InlineKeyboardButton(f'Нужно забрать вещи по адресу', callback_data=data_for_transfer_request)],
@@ -291,8 +292,14 @@ def client_time_arrive(update: Update, context):
 
     reply_text = 'Подтвердите согласие на обработку персональных данных. Полный текст доступен по адресу:' \
                  'http://some.url/text.pdf'
+
+    if context.user_data['transfer_type'] == 0:
+        data_for_transfer_request = 'client_save_transfer'
+    else:
+        data_for_transfer_request = 'client_save_delivery_transfer'
+
     buttons = [
-        [InlineKeyboardButton(f'Согласен на обработку перс.данных', callback_data=f'client_save_transfer')],
+        [InlineKeyboardButton(f'Согласен на обработку перс.данных', callback_data=data_for_transfer_request)],
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     context.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
@@ -333,12 +340,40 @@ def client_save_transfer(update: Update, context):
         context.user_data['user'].utm_source = utm_source
         context.user_data['user'].save()
 
+    context.user_data['transfer_type'] = None
+    context.user_data['utm_source'] = None
+
     reply_text = 'Спасибо за ваш заказ! Наши грузчики позвонят вам за 1 час до приезда'
     buttons = [
         [InlineKeyboardButton('В начало', callback_data=f'start')]
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
+
+def client_save_delivery_transfer(update: Update, context):
+    query = update.callback_query
+    query.answer()
+
+    # save transfer in DB
+    TransferRequest.objects.create(
+        box=context.user_data['current_box'],
+        transfer_type=1,
+        address=context.user_data['address'],
+        time_arrive=context.user_data['time_arrive'],
+        is_complete=False,
+    )
+
+    context.user_data['transfer_type'] = None
+    context.user_data['current_box'] = None
+
+    reply_text = 'Спасибо за ваш заказ! Наши грузчики позвонят вам за 1 час до приезда'
+    buttons = [
+        [InlineKeyboardButton('В начало', callback_data=f'start')]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+
 
 def client_self_transfer(update: Update, context):
     query = update.callback_query
@@ -391,7 +426,7 @@ def unpaid_boxes(update: Update, context):
     tz=timezone('Europe/Moscow')      
     current_datetime=datetime.now(tz)
     boxes = Box.objects.filter(paid_till__lte=current_datetime).prefetch_related('user')
-    reply_text = 'Просроченных боксов нету'
+    reply_text = 'Просроченных боксов нет'
     unpaix_boxes_html = [get_template('unpaid_boxes', {'box': box}) for box in boxes]
     if boxes:
         reply_text = '\n'.join(unpaix_boxes_html)        
@@ -480,16 +515,29 @@ def sends_boxing_info(update: Update, _) -> None:
     query = update.callback_query
     query.answer()
     query.edit_message_text(
-        'Информация',
+        '',
         reply_markup=reply_markup
     )
 
 
 
-def offers_ways_pick_up_things(update, _):
+def offers_ways_pick_up_things(update, context):
     """Показ нового выбора кнопок"""
     query = update.callback_query
     query.answer()
+
+    reply_text = "Вы можете заказать доставку как всех, так и части вещей, находящихся в вашем боксе. " \
+                 "Впоследствии вы можете вернуть часть забранных вещей обратно в бокс. " \
+                 "Мы с вами свяжемся для уточнения деталей." \
+                 "\n" \
+                 "Укажите адрес доставки:"
+
+    context.user_data['ask_address'] = True
+    context.user_data['transfer_type'] = 1
+
+    context.bot.send_message(text=reply_text, chat_id=update.effective_chat.id)
+
+    '''
     keyboard = [
         [
             InlineKeyboardButton(
@@ -513,7 +561,7 @@ def offers_ways_pick_up_things(update, _):
              "Вещи можно будет вернуть обратно",
         reply_markup=reply_markup
     )
-
+    '''
 
 def get_client_information(update, _):
     query = update.callback_query
@@ -528,24 +576,23 @@ def get_client_information(update, _):
         text='Введите желаемое время доставки'
     )
 
-def confirms_application(update, context):
-    update.message.reply_text(
-        'Заявка принята'
-    )
-
-
-
 
 def sends_qar_code(update, context):
     query = update.callback_query
     query.answer()
-    query.edit_message_text(text=f'{STORAGE_INFO["address"]}\n'
-                                 f'{STORAGE_INFO["working_hours"]}'
-                            )
+
+    reply_text = get_template('storage_info', {'storage': STORAGE_INFO})
+
+    buttons = [
+        [InlineKeyboardButton(f'В начало', callback_data=f'start')],
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+
     get_random_qua_cod()
-    with open('../bot/qua.png', 'rb') as file:
-        context.bot.send_document(chat_id=update.effective_chat.id, document=file)
-    return ConversationHandler.END
+    with open('qua.png', 'rb') as file:
+        query.bot.send_document(caption=reply_text, reply_markup=reply_markup, document=file,
+                                chat_id=update.effective_chat.id)
+        # context.bot.send_document(chat_id=update.effective_chat.id, document=file, caption=reply_text)
 
 
 def get_random_qua_cod():
@@ -590,18 +637,20 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(client_ask_phone, pattern='^client_ask_phone$'))
     app.add_handler(CallbackQueryHandler(client_ask_address, pattern='^client_ask_address$'))
     app.add_handler(CallbackQueryHandler(client_time_arrive, pattern='^client_time_arrive_'))
-    app.add_handler(CallbackQueryHandler(client_save_transfer, pattern='^client_save_transfer'))
+    app.add_handler(CallbackQueryHandler(client_save_delivery_transfer, pattern='^client_save_delivery_transfer$'))
+    app.add_handler(CallbackQueryHandler(client_save_transfer, pattern='^client_save_transfer$'))
     app.add_handler(CallbackQueryHandler(client_self_transfer, pattern='^client_self_transfer$'))
+
 
     app.add_handler(CallbackQueryHandler(sends_boxing_info,pattern='^there is already a boxing$'))
     app.add_handler(CallbackQueryHandler(offers_ways_pick_up_things,pattern='^' + 'pick up all the things' + '$'))
     app.add_handler(CallbackQueryHandler(offers_ways_pick_up_things,pattern='^' + 'pick up some things' + '$'))
-    app.add_handler(CallbackQueryHandler(sends_qar_code,pattern='^' + "i'll pick it up myself" + '$'))
+    app.add_handler(CallbackQueryHandler(sends_qar_code,pattern='^' + "pick it up myself" + '$'))
     app.add_handler(CallbackQueryHandler(get_client_information,pattern='^' + "need a courier for delivery" + '$'))
 
     app.add_handler(CommandHandler("start", start))
 
-    app.add_handler(MessageHandler(Filters.text, confirms_application))
+    # app.add_handler(MessageHandler(Filters.text, confirms_application))
     app.add_handler(MessageHandler(Filters.text, message_handler))
     app.add_error_handler(error_handler_function)
 
