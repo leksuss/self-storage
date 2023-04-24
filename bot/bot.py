@@ -150,6 +150,7 @@ def client_listboxes(update: Update, context):
 def client_show_box(update: Update, context):
     query = update.callback_query
     query.answer()
+
     box_id = int(query.data.split('_')[-1])
     box = Box.objects.get(pk=box_id)
     context.user_data['current_box'] = box
@@ -157,12 +158,34 @@ def client_show_box(update: Update, context):
     reply_text = get_template('showbox', {'box': box})
     buttons = [
         [InlineKeyboardButton(f'Заказать доставку вещей', callback_data=f'pick up all the things')],
-        # [InlineKeyboardButton(f'Заказать доставку части вещей', callback_data=f'pick up some things')],
-        [InlineKeyboardButton(f'Хочу забрать самостоятельно', callback_data=f'pick it up myself')]
+        [InlineKeyboardButton(f'Хочу забрать самостоятельно', callback_data=f'pick it up myself')],
+        [InlineKeyboardButton(f'Изменить описание', callback_data=f'change_description')]
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
+
+def change_description(update: Update, context):
+
+    context.user_data['ask_change_description'] = True
+    reply_text = 'Введите новое описание для содержимого бокса:'
+    context.bot.send_message(text=reply_text, chat_id=update.effective_chat.id)
+
+
+def client_apply_description(update: Update, context):
+
+    Box.objects.filter(pk=context.user_data['current_box'].id).update(description=context.user_data['description'])
+
+    box = Box.objects.get(pk=context.user_data['current_box'].id)
+
+    reply_text = get_template('showbox', {'box': box})
+    buttons = [
+        [InlineKeyboardButton(f'Заказать доставку вещей', callback_data=f'pick up all the things')],
+        [InlineKeyboardButton(f'Хочу забрать самостоятельно', callback_data=f'pick it up myself')],
+        [InlineKeyboardButton(f'Изменить описание', callback_data=f'change_description')]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    context.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
 def client_buy_box(update: Update, context):
     query = update.callback_query
@@ -416,6 +439,10 @@ def message_handler(update, context):
         context.user_data['address'] = update.message.text
         context.user_data['ask_address'] = False
         client_ask_time_arrive(update, context)
+    elif context.user_data.get('ask_change_description'):
+        context.user_data['description'] = update.message.text
+        context.user_data['ask_change_description'] = False
+        client_apply_description(update, context)
 
 
 
@@ -645,7 +672,7 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(client_save_delivery_transfer, pattern='^client_save_delivery_transfer$'))
     app.add_handler(CallbackQueryHandler(client_save_transfer, pattern='^client_save_transfer$'))
     app.add_handler(CallbackQueryHandler(client_self_transfer, pattern='^client_self_transfer$'))
-
+    app.add_handler(CallbackQueryHandler(change_description, pattern='^change_description'))
 
     app.add_handler(CallbackQueryHandler(sends_boxing_info,pattern='^there is already a boxing$'))
     app.add_handler(CallbackQueryHandler(offers_ways_pick_up_things,pattern='^' + 'pick up all the things' + '$'))
