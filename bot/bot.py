@@ -138,7 +138,7 @@ def client_listboxes(update: Update, context):
     reply_text = 'Список ваших боксов\n'
     buttons = []
     for box in boxes:
-        button_text = f'Бокс номер {box.id} весом {box.weight}, оплачен по {box.paid_till}'
+        button_text = get_template('client_box', {'box': box})
         buttons.append(
             [InlineKeyboardButton(button_text, callback_data=f'client_show_box_{box.id}')]
         )
@@ -430,10 +430,14 @@ def unpaid_boxes(update: Update, context):
     current_datetime=datetime.now(tz)
     boxes = Box.objects.filter(paid_till__lte=current_datetime).prefetch_related('user')
     reply_text = 'Просроченных боксов нет'
-    unpaix_boxes_html = [get_template('unpaid_boxes', {'box': box}) for box in boxes]
     if boxes:
-        reply_text = '\n'.join(unpaix_boxes_html)        
-    context.bot.send_message(text=reply_text,  chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
+        unpaix_boxes_html = [get_template('unpaid_boxes', {'box': box}) for box in boxes]
+        reply_text = 'Список боксов с просроченной оплатой:\n\n'
+        reply_text += '\n'.join(unpaix_boxes_html)
+
+    buttons = [[InlineKeyboardButton(f'В начало', callback_data=f'start')]]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
 
 
 def transfers(update: Update, context):
@@ -444,7 +448,7 @@ def transfers(update: Update, context):
     buttons = []
     for transfer in transfers:
         reply_text = 'Список заявок на перевозку грузов\n'
-        button_text = f'Бокс № {transfer.box.id}, {transfer.transfer_type}'
+        button_text = f'Бокс № {transfer.box.id}, {transfer.get_transfer_type_display()}'
         buttons.append(
             [InlineKeyboardButton(button_text, callback_data=f'transfer_box_{transfer.id}')],
         )

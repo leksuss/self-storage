@@ -1,4 +1,5 @@
 Номер бокса: {{ box.id }}
-Размеры: {{ box.weight }} м**2, объем {{ box.volume }} м**3
-Оплачено с {{ box.paid_from }} по {{ box.paid_till }}
+Вес: {{ box.weight }} кг
+Объем: {{ box.volume }} м³
+Оплачено с {{ box.paid_from|date:'d-m-Y' }} по {{ box.paid_till|date:'d-m-Y' }}
 Описание: {{ box.description }}

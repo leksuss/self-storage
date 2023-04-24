@@ -1,5 +1,5 @@
 ID трансфера: {{ transfer.id }}
 Номер бокса, который нужно перевезти: {{ transfer.box.id }}
-Тип трансфера: {{ transfer.transfer_type }}
+Тип трансфера: {{ transfer.get_transfer_type_display }}
 Адрес забора/доставки: {{ transfer.address }}
 Желаемое время приезда грузчиков: {{ transfer.time_arrive }} часов
