@@ -22,6 +22,8 @@ django.setup()
 from django.template.loader import render_to_string
 from storage.models import User, Box, Promocodes, TransferRequest
 
+import qrcode
+import random
 
 STATIC_PAGES = (
     'forbidden_cargo',
@@ -97,6 +99,7 @@ def start(update: Update, context):
         buttons = [
             [InlineKeyboardButton("Список ваших боксов", callback_data='client_listboxes')],
             [InlineKeyboardButton("Купить еще один бокс", callback_data='client_buy_box')],
+            [InlineKeyboardButton("Забрать вещи", callback_data='there is already a boxing')]
         ]
     else:
         reply_text += get_template('new_client_welcome', {})
@@ -437,8 +440,104 @@ def transfer_complete(update: Update, context):
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.bot.send_message(text=reply_text, reply_markup=reply_markup, chat_id=update.effective_chat.id)
+###########################################################################################################
 
 
+def sends_boxing_info(update: Update, _) -> None:
+    """Parses the CallbackQuery and updates the message text."""
+    button = [
+        [
+            InlineKeyboardButton(
+                "Забрать все вещи",
+                callback_data='pick up all the things'
+            ),
+            InlineKeyboardButton(
+                "Забрать часть вещей",
+                callback_data='pick up some things'
+            )
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(button)
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(
+        'Информация',
+        reply_markup=reply_markup
+    )
+
+
+
+def offers_ways_pick_up_things(update, _):
+    """Показ нового выбора кнопок"""
+    query = update.callback_query
+    query.answer()
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "Заберу сам", callback_data="i'll pick it up myself"
+            ),
+            InlineKeyboardButton(
+                "Нужен курьер для доставки",
+                callback_data="need a courier for delivery"
+            ),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if query.data == 'pick up all the things':
+        query.edit_message_text(
+            text="Выберите удобный способ забрать вещи",
+            reply_markup=reply_markup
+        )
+        return
+    query.edit_message_text(
+        text="Выберите удобный способ забрать вещи.\n"
+             "Вещи можно будет вернуть обратно",
+        reply_markup=reply_markup
+    )
+
+
+def get_client_information(update, _):
+    query = update.callback_query
+    query.answer()
+    user_id = query.from_user.id
+    user = User.objects.get(chat_id=user_id)
+    if not user.address:
+        query.edit_message_text(
+            text='Введите адрес доставки и желаемое время доставки'
+        )
+    query.edit_message_text(
+        text='Введите желаемое время доставки'
+    )
+
+def confirms_application(update, context):
+    update.message.reply_text(
+        'Заявка принята'
+    )
+
+
+
+
+def sends_qar_code(update, context):
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(text=f'{STORAGE_INFO["address"]}\n'
+                                 f'{STORAGE_INFO["working_hours"]}'
+                            )
+    get_random_qua_cod()
+    with open('../bot/qua.png', 'rb') as file:
+        context.bot.send_document(chat_id=update.effective_chat.id, document=file)
+    return ConversationHandler.END
+
+
+def get_random_qua_cod():
+    random_code = ''
+    number_digits = 12
+    for number in range(number_digits):
+        random_code = random_code + random.choice(list(
+            '123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM'))
+    filename = "qua.png"
+    img = qrcode.make(random_code)
+    img.save(filename)
 
 
 if __name__ == '__main__':
@@ -474,8 +573,15 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(client_save_transfer, pattern='^client_save_transfer'))
     app.add_handler(CallbackQueryHandler(client_self_transfer, pattern='^client_self_transfer$'))
 
+    app.add_handler(CallbackQueryHandler(sends_boxing_info,pattern='^there is already a boxing$'))
+    app.add_handler(CallbackQueryHandler(offers_ways_pick_up_things,pattern='^' + 'pick up all the things' + '$'))
+    app.add_handler(CallbackQueryHandler(offers_ways_pick_up_things,pattern='^' + 'pick up some things' + '$'))
+    app.add_handler(CallbackQueryHandler(sends_qar_code,pattern='^' + "i'll pick it up myself" + '$'))
+    app.add_handler(CallbackQueryHandler(get_client_information,pattern='^' + "need a courier for delivery" + '$'))
+
     app.add_handler(CommandHandler("start", start))
 
+    app.add_handler(MessageHandler(Filters.text, confirms_application))
     app.add_handler(MessageHandler(Filters.text, message_handler))
     app.add_error_handler(error_handler_function)
 
